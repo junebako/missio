@@ -34,6 +34,8 @@ include:
     # Rails認証情報
     - config/credentials/*
     - config/master.key
+    # デプロイツール
+    - .kamal/*
     # その他の一般的な場所
     - .ssh/*
     - secrets/*

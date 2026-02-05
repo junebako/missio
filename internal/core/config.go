@@ -59,6 +59,7 @@ var defaultConfig = Config{
 		Paths: []string{
 			"config/credentials/*",
 			"config/master.key",
+			".kamal/*",
 		},
 	},
 	Exclude: struct {

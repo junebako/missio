@@ -4,14 +4,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	ignore "github.com/sabhiram/go-gitignore"
 )
 
 // Scanner は指定されたディレクトリ内の秘匿ファイルを検出します
 type Scanner struct {
 	rootDir string
-	ignore  *ignore.GitIgnore
 	logger  *Logger
 	config  *Config
 }
@@ -38,10 +35,6 @@ var excludeDirs = []string{
 
 // NewScanner は新しいScannerインスタンスを作成します
 func NewScanner(rootDir string, verbose bool, maxDepth int) (*Scanner, error) {
-	// .gitignoreファイルを読み込む
-	gitIgnorePath := filepath.Join(rootDir, ".gitignore")
-	ignore, _ := ignore.CompileIgnoreFile(gitIgnorePath)
-
 	// 設定ファイルを読み込む
 	config, err := LoadConfig(rootDir)
 	if err != nil {
@@ -50,7 +43,6 @@ func NewScanner(rootDir string, verbose bool, maxDepth int) (*Scanner, error) {
 
 	return &Scanner{
 		rootDir: rootDir,
-		ignore:  ignore,
 		logger:  NewLogger(rootDir, verbose, maxDepth),
 		config:  config,
 	}, nil
@@ -85,12 +77,7 @@ func (s *Scanner) Scan() ([]string, error) {
 			return err
 		}
 
-		// gitignoreでマッチしないファイルはスキップ
-		if s.ignore != nil && !s.ignore.MatchesPath(relPath) {
-			return nil
-		}
-
-		// 秘匿ファイルかどうかをチェック
+		// 秘匿ファイルかどうかをチェック（パターンマッチ優先）
 		if s.isSecretFile(relPath) {
 			files = append(files, relPath)
 		}
@@ -127,7 +114,7 @@ func (s *Scanner) isSecretFile(relPath string) bool {
 	}
 
 	for _, pattern := range s.config.Exclude.Paths {
-		if matched, _ := filepath.Match(pattern, lowerPath); matched {
+		if matchPathPattern(pattern, lowerPath) {
 			return false
 		}
 	}
@@ -146,10 +133,26 @@ func (s *Scanner) isSecretFile(relPath string) bool {
 	}
 
 	for _, pattern := range s.config.Include.Paths {
-		if matched, _ := filepath.Match(pattern, lowerPath); matched {
+		if matchPathPattern(pattern, lowerPath) {
 			return true
 		}
 	}
 
 	return false
+}
+
+// matchPathPattern はパスパターンを相対パスの各サブパスに対してマッチングします。
+// 例: パターン ".kamal/*" は "project/.kamal/secrets" にもマッチします。
+func matchPathPattern(pattern, path string) bool {
+	for {
+		if matched, _ := filepath.Match(pattern, path); matched {
+			return true
+		}
+		// 先頭のディレクトリを1つ削って次のサブパスを試す
+		i := strings.IndexByte(path, filepath.Separator)
+		if i < 0 {
+			return false
+		}
+		path = path[i+1:]
+	}
 }
